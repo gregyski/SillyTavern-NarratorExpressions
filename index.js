@@ -60,25 +60,6 @@ let busy = false;
 
 /**@type {MutationObserver} */
 let mo;
-const init = ()=>{
-    log('init');
-    initSettings();
-    mo = new MutationObserver(muts=>{
-        if (busy) return;
-        const lastCharMes = chat.toReversed().find(it=>!it.is_user && !it.is_system && nameList.find(o=>it.name == o));
-        const img = imgs.find(it=>it.getAttribute('data-character') == lastCharMes?.name);
-        if (img && document.querySelector('#expression-image').src) {
-            const src = document.querySelector('#expression-image').src;
-            const parts = src.split('/');
-            const name = parts[parts.indexOf('characters')+1];
-            const img = imgs.find(it=>it.getAttribute('data-character') == name)?.querySelector('.stge--img');
-            if (img) {
-                img.src = src;
-            }
-        }
-    });
-};
-eventSource.on(event_types.APP_READY, ()=>init());
 
 const updateSettingsBackground = ()=>{
     if (document.querySelector('.stge--settings .inline-drawer-content').getBoundingClientRect().height > 0 && settings.transparentMenu) {
@@ -320,12 +301,10 @@ const chatChanged = async ()=>{
         end();
     }
 };
-eventSource.on(event_types.CHAT_CHANGED, ()=>chatChanged());
 
 const groupUpdated = (...args) => {
     log('GROUP UPDATED', args);
 };
-eventSource.on(event_types.GROUP_UPDATED, (...args)=>groupUpdated(...args));
 
 const messageRendered = async () => {
     log('messageRendered');
@@ -411,7 +390,6 @@ const messageRendered = async () => {
         await delay(Math.max(settings.transition + 100, 500));
     }
 };
-// eventSource.on(event_types.USER_MESSAGE_RENDERED, ()=>messageRendered());
 // eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, ()=>messageRendered());
 
 
@@ -514,7 +492,10 @@ const updateMembers = async()=>{
     }
     busy = false;
 };
+eventSource.on(event_types.CHAT_CHANGED, ()=>chatChanged());
+eventSource.on(event_types.GROUP_UPDATED, (...args)=>groupUpdated(...args));
 eventSource.on(event_types.GROUP_UPDATED, ()=>updateMembers());
+// eventSource.on(event_types.USER_MESSAGE_RENDERED, ()=>messageRendered());
 
 
 
@@ -580,3 +561,23 @@ const end = ()=>{
     document.querySelector('#expression-wrapper').style.opacity = '';
     log('/end');
 };
+
+const init = ()=>{
+    log('init');
+    initSettings();
+    mo = new MutationObserver(muts=>{
+        if (busy) return;
+        const lastCharMes = chat.toReversed().find(it=>!it.is_user && !it.is_system && nameList.find(o=>it.name == o));
+        const img = imgs.find(it=>it.getAttribute('data-character') == lastCharMes?.name);
+        if (img && document.querySelector('#expression-image').src) {
+            const src = document.querySelector('#expression-image').src;
+            const parts = src.split('/');
+            const name = parts[parts.indexOf('characters')+1];
+            const img = imgs.find(it=>it.getAttribute('data-character') == name)?.querySelector('.stge--img');
+            if (img) {
+                img.src = src;
+            }
+        }
+    });
+};
+init();
