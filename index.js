@@ -1,4 +1,4 @@
-import { chat, chat_metadata, eventSource, event_types, getRequestHeaders, saveChatConditional, saveChatDebounced, saveSettingsDebounced } from '../../../../script.js';
+import { chat, chat_metadata, eventSource, event_types, getRequestHeaders, saveSettingsDebounced } from '../../../../script.js';
 import { extension_settings, getContext, saveMetadataDebounced } from '../../../extensions.js';
 import { delay } from '../../../utils.js';
 
@@ -458,7 +458,8 @@ const updateMembers = async()=>{
             wrap.setAttribute('data-character', name);
             const img = document.createElement('img'); {
                 img.classList.add('stge--img');
-                img.src = await findImage(name);
+                const tc = chat_metadata.triggerCards ?? {};
+                img.src = await findImage(tc?.costumes?.[name] ?? name);
                 wrap.append(img);
             }
         }
