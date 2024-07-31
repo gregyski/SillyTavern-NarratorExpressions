@@ -436,7 +436,7 @@ const updateMembers = async()=>{
     } else if (groupId) {
         const group = context.groups.find(it=>it.id == groupId);
         const members = group.members.map(m=>characters.find(c=>c.avatar == m)).filter(it=>it);
-        const names = getOrder(members.map(it=>it.name)).filter(it=>csettings.exclude?.indexOf(it.toLowerCase()) == -1);
+        names.push(...getOrder(members.map(it=>it.name)).filter(it=>csettings.exclude?.indexOf(it.toLowerCase()) == -1));
         names.push(...members.filter(m=>!names.find(it=>it == m.name)).map(it=>it.name).filter(it=>csettings.exclude?.indexOf(it.toLowerCase()) == -1));
     } else {
         names.push(characters[context.characterId].name);
