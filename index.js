@@ -1,6 +1,9 @@
-import { chat, chat_metadata, eventSource, event_types, getRequestHeaders, saveSettingsDebounced } from '../../../../script.js';
+import { characters, chat, chat_metadata, eventSource, event_types, getRequestHeaders, saveSettingsDebounced } from '../../../../script.js';
 import { extension_settings, getContext, saveMetadataDebounced } from '../../../extensions.js';
-import { delay } from '../../../utils.js';
+import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
+import { ARGUMENT_TYPE, SlashCommandArgument } from '../../../slash-commands/SlashCommandArgument.js';
+import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
+import { delay, escapeRegex } from '../../../utils.js';
 
 const log = (...msg) => console.log('[GE]', ...msg);
 /**
@@ -137,6 +140,12 @@ const initSettings = () => {
                 </div>
                 <div class="flex-container">
                     <label>
+                        Custom character list <small>(comma separated list of names, <strong>saved in chat</strong>)</small>
+                        <input type="text" class="text_pole" id="stge--members" placeholder="Alice, Bob, Carol" value="" disabled>
+                    </label>
+                </div>
+                <div class="flex-container">
+                    <label>
                         Scale of current speaker <small>(percentage; 100 = no change; <100 = shrink; >100 = grow)</small>
                         <input type="number" class="text_pole" min="0" id="stge--scaleSpeaker" value="${settings.scaleSpeaker}">
                     </label>
@@ -210,6 +219,11 @@ const initSettings = () => {
     });
     document.querySelector('#stge--exclude').addEventListener('input', ()=>{
         csettings.exclude = document.querySelector('#stge--exclude').value.toLowerCase().split(/\s*,\s*/).filter(it=>it.length);
+        chat_metadata.groupExpressions = csettings;
+        saveMetadataDebounced();
+    });
+    document.querySelector('#stge--members').addEventListener('input', ()=>{
+        csettings.members = document.querySelector('#stge--members').value.split(/\s*,\s*/).filter(it=>it.length);
         chat_metadata.groupExpressions = csettings;
         saveMetadataDebounced();
     });
@@ -289,13 +303,16 @@ const chatChanged = async ()=>{
 
     csettings = Object.assign({
         exclude: [],
+        members : [],
     }, chat_metadata.groupExpressions ?? {});
     chat_metadata.groupExpressions = csettings;
     log(chat_metadata);
     document.querySelector('#stge--exclude').disabled = context.groupId == null;
     document.querySelector('#stge--exclude').value = csettings.exclude?.join(', ') ?? '';
+    document.querySelector('#stge--members').disabled = context.chatId == null;
+    document.querySelector('#stge--members').value = csettings.members?.join(', ') ?? '';
 
-    if (context.groupId) {
+    if (true || context.groupId) {
         await restart();
     } else {
         end();
@@ -308,7 +325,7 @@ const groupUpdated = (...args) => {
 
 const messageRendered = async () => {
     log('messageRendered');
-    while (settings.isEnabled && groupId) {
+    while (settings.isEnabled && (groupId || true)) {
         if (!busy) {
             updateSettingsBackground();
             await updateMembers();
@@ -411,10 +428,19 @@ const updateMembers = async()=>{
     if (busy) return;
     busy = true;
     const context = getContext();
-    const group = context.groups.find(it=>it.id == groupId);
-    const members = group.members.map(m=>context.characters.find(c=>c.avatar == m)).filter(it=>it);
-    const names = getOrder(members.map(it=>it.name)).filter(it=>csettings.exclude?.indexOf(it.toLowerCase()) == -1);
-    names.push(...members.filter(m=>!names.find(it=>it == m.name)).map(it=>it.name).filter(it=>csettings.exclude?.indexOf(it.toLowerCase()) == -1));
+    const names = [];
+    if (csettings.members?.length) {
+        const members = getOrderFromText(csettings.members);
+        names.push(...members);
+        names.push(...csettings.members.filter(m=>!names.find(it=>it == m)));
+    } else if (groupId) {
+        const group = context.groups.find(it=>it.id == groupId);
+        const members = group.members.map(m=>characters.find(c=>c.avatar == m)).filter(it=>it);
+        const names = getOrder(members.map(it=>it.name)).filter(it=>csettings.exclude?.indexOf(it.toLowerCase()) == -1);
+        names.push(...members.filter(m=>!names.find(it=>it == m.name)).map(it=>it.name).filter(it=>csettings.exclude?.indexOf(it.toLowerCase()) == -1));
+    } else {
+        names.push(characters[context.characterId].name);
+    }
     const removed = nameList.filter(it=>names.indexOf(it) == -1);
     const added = names.filter(it=>nameList.indexOf(it) == -1);
     for (const name of removed) {
@@ -515,6 +541,27 @@ const getOrder = (members)=>{
     }
     return o;
 };
+const getOrderFromText = (members)=>{
+    members = [...members];
+    const o = [];
+    const regex = members.map(it=>[it, new RegExp(`(?:^|\\W)(${escapeRegex(it)})(?:$|\\W)`)]).reduce((dict,cur)=>(dict[cur[0]] = cur[1], dict), {});
+    const mesList = chat.filter(it=>!it.is_system && !it.is_user).toReversed();
+    for (const mes of mesList) {
+        const mesmem = [];
+        for (const m of members) {
+            if (regex[m].test(mes.mes)) {
+                const match = regex[m].exec(mes.mes);
+                mesmem.push([m, match]);
+            }
+        }
+        mesmem.sort((a,b)=>a[1].index - b[1].index);
+        o.push(...mesmem.map(it=>it[0]).filter((it,idx,list)=>idx == list.indexOf(it)));
+        for (const m of mesmem) {
+            members.splice(members.indexOf(m[0]), 1);
+        }
+    }
+    return o;
+};
 let restarting = false;
 const restart = debounceAsync(async()=>{
     if (restarting) return;
@@ -582,3 +629,39 @@ const init = ()=>{
     });
 };
 init();
+
+
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({ name: 'ge-members',
+    /**
+     *
+     * @param {*} args
+     * @param {string} value
+     */
+    callback: (args, value)=>{
+        const inp = /**@type {HTMLInputElement}*/(document.querySelector('#stge--members'));
+        inp.value = JSON.parse(value).join(', ');
+        inp.dispatchEvent(new Event('input'));
+        return JSON.stringify(csettings.members ?? []);
+    },
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({ description: 'list of names, [] to clear',
+            typeList: ARGUMENT_TYPE.LIST,
+        }),
+    ],
+    returns: 'current custom member list',
+    helpString: `
+        <div>
+            Update the custom member list for Group Expressions.
+        </div>
+        <div>
+            Leave the unnamed argument blank to just return the current custom member list.
+        </div>
+        <div>
+            <strong>Examples:</strong>
+            <ul>
+                <li><pre><code class="language-stscript">/ge-members ["Alice", "Bob"]</code></pre></li>
+                <li><pre><code class="language-stscript">/ge-members | /echo</code></pre></li>
+            </ul>
+        </div>
+    `,
+}));
