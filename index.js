@@ -639,8 +639,12 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({ name: 'ge-members',
      */
     callback: (args, value)=>{
         const inp = /**@type {HTMLInputElement}*/(document.querySelector('#stge--members'));
-        inp.value = JSON.parse(value).join(', ');
-        inp.dispatchEvent(new Event('input'));
+        try {
+            inp.value = JSON.parse(value).join(', ');
+            inp.dispatchEvent(new Event('input'));
+        } catch {
+            // no (or no valid) value provided, nothing to do
+        }
         return JSON.stringify(csettings.members ?? []);
     },
     unnamedArgumentList: [
