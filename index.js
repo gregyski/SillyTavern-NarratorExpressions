@@ -209,7 +209,7 @@ const initSettings = () => {
         saveSettingsDebounced();
     });
     document.querySelector('#stge--exclude').addEventListener('input', ()=>{
-        csettings.exclude = document.querySelector('#stge--exclude').value.toLowerCase().split(/\s*,\s*/);
+        csettings.exclude = document.querySelector('#stge--exclude').value.toLowerCase().split(/\s*,\s*/).filter(it=>it.length);
         chat_metadata.groupExpressions = csettings;
         saveMetadataDebounced();
     });
